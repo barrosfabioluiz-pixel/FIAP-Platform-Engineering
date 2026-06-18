@@ -1,6 +1,11 @@
-variable "AWS_REGION" {
+variable "aws_region" {
   default = "us-east-1"
 }
+
+provider "aws" {
+  region = var.aws_region
+}
+
 resource "aws_sqs_queue" "terraform_queue" {
   name                      = "terraform-example-queue"
   delay_seconds             = 90
@@ -10,7 +15,4 @@ resource "aws_sqs_queue" "terraform_queue" {
   tags = {
     Environment = "production"
   }
-}
-provider "aws" {
-    region = "${var.AWS_REGION}"
 }
