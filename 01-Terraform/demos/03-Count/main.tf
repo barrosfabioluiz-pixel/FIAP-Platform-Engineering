@@ -31,9 +31,30 @@ data "aws_subnet" "public" {
   id       = each.value
 }
 
-# Escolhe aleatoriamente uma subnet publica para hospedar as instancias da frota.
+# Nem toda Availability Zone oferta todos os tipos de instancia. Em us-east-1, por
+# exemplo, a AZ us-east-1e NAO oferta t3.micro, e um sorteio que caisse nela faria
+# o apply falhar com "Unsupported instance type". Descobrimos dinamicamente em quais
+# AZs o tipo escolhido existe e sorteamos apenas entre as subnets dessas AZs.
+data "aws_ec2_instance_type_offerings" "supported" {
+  filter {
+    name   = "instance-type"
+    values = [var.instance_type]
+  }
+  location_type = "availability-zone"
+}
+
+locals {
+  supported_azs = toset(data.aws_ec2_instance_type_offerings.supported.locations)
+  eligible_subnet_ids = [
+    for s in data.aws_subnet.public : s.id
+    if contains(local.supported_azs, s.availability_zone)
+  ]
+}
+
+# Escolhe aleatoriamente uma subnet publica (em AZ que oferta o tipo de instancia)
+# para hospedar as instancias da frota.
 resource "random_shuffle" "random_subnet" {
-  input        = [for s in data.aws_subnet.public : s.id]
+  input        = local.eligible_subnet_ids
   result_count = 1
 }
 
@@ -66,7 +87,7 @@ resource "aws_elb" "web" {
 # A frota de servidores. count = 2 cria duas EC2 identicas; alterar esse numero
 # escala a frota para cima ou para baixo num unico apply.
 resource "aws_instance" "web" {
-  instance_type = "t3.micro"
+  instance_type = var.instance_type
   ami           = data.aws_ami.amazon_linux.id
 
   count = 2

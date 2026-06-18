@@ -12,18 +12,21 @@ Os comandos `bash` rodam **no terminal do Codespaces**. As verificações são f
 > [!WARNING]
 > **Pré-requisitos obrigatórios antes de começar:**
 >
-> - [ ] [Lab 01.2 — Módulos](../02-Modules/README.md) concluído **e a rede ainda de pé** (a frota vai nascer dentro daquela VPC)
+> - [ ] [Lab 01.2 — Módulos](../02-Modules/README.md) concluído **por completo** — tanto o `vpc-call` (VPC + subnets) **quanto o `RT-call` (route tables com rota para o Internet Gateway)**. Sem as rotas, os servidores sobem mas ficam sem internet e a instalação via SSH falha por timeout.
 > - [ ] Credenciais AWS do Academy atualizadas no Codespaces
 > - [ ] Par de chaves `vockey` em `/home/vscode/.ssh/vockey.pem`
 > - [ ] Você consegue abrir o [painel EC2 → Load Balancers](https://us-east-1.console.aws.amazon.com/ec2/home?region=us-east-1#LoadBalancers:)
 >
-> **Valide rapidamente que a rede do lab anterior existe:**
+> **Valide rapidamente que a rede do lab anterior existe e tem rota para a internet:**
 >
 > ```bash
-> aws ec2 describe-vpcs --filters "Name=tag:Name,Values=fiap-lab" --query "Vpcs[].VpcId" --output text
+> VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=fiap-lab" --query "Vpcs[0].VpcId" --output text)
+> echo "VPC: $VPC_ID"
+> aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC_ID" \
+>   --query "RouteTables[].Routes[?GatewayId!='local'].GatewayId" --output text
 > ```
 >
-> Se imprimir um `vpc-...`, a rede está de pé e você pode seguir. Se vier vazio, volte ao [Lab 01.2](../02-Modules/README.md) e suba a VPC primeiro.
+> Se a primeira linha imprimir um `vpc-...` **e** a segunda imprimir um `igw-...`, a rede está completa e você pode seguir. Se a VPC vier vazia, suba o `vpc-call`; se a VPC existir mas não houver `igw-...`, falta rodar o `RT-call` — volte ao [Lab 01.2](../02-Modules/README.md).
 >
 > **O que você vai fazer:** subir uma frota de 2 servidores web atrás de um Classic Load Balancer, escalar para 3, reduzir para 1, e destruir tudo (frota + rede). **Tempo estimado: ~30 min.**
 
@@ -154,9 +157,27 @@ data "aws_subnet" "public" {
   id       = each.value
 }
 
-# Sorteia uma subnet publica para hospedar as instancias.
+# Nem toda Availability Zone oferta todo tipo de instancia (ex.: us-east-1e nao
+# tem t3.micro). Descobrimos as AZs que ofertam o tipo escolhido...
+data "aws_ec2_instance_type_offerings" "supported" {
+  filter {
+    name   = "instance-type"
+    values = [var.instance_type]
+  }
+  location_type = "availability-zone"
+}
+
+locals {
+  supported_azs = toset(data.aws_ec2_instance_type_offerings.supported.locations)
+  eligible_subnet_ids = [
+    for s in data.aws_subnet.public : s.id
+    if contains(local.supported_azs, s.availability_zone)
+  ]
+}
+
+# ...e sorteamos apenas entre as subnets dessas AZs.
 resource "random_shuffle" "random_subnet" {
-  input        = [for s in data.aws_subnet.public : s.id]
+  input        = local.eligible_subnet_ids
   result_count = 1
 }
 
@@ -187,7 +208,7 @@ resource "aws_elb" "web" {
 
 # A frota. count = 2 cria duas EC2 identicas; mudar esse numero escala a frota.
 resource "aws_instance" "web" {
-  instance_type = "t3.micro"
+  instance_type = var.instance_type
   ami           = data.aws_ami.amazon_linux.id
   count         = 2
 
@@ -219,7 +240,7 @@ Pontos-chave:
 - `count = 2` cria `aws_instance.web[0]` e `aws_instance.web[1]`
 - `aws_instance.web[*].id` é a expressão **splat**: a lista de IDs de **todas** as cópias, entregue ao ELB no atributo `instances`
 - `format("nginx-%03d", count.index + 1)` nomeia as máquinas `nginx-001`, `nginx-002`, ...
-- `random_shuffle` escolhe uma subnet pública para as instâncias
+- `random_shuffle` escolhe uma subnet pública para as instâncias — mas só entre as AZs que ofertam o `var.instance_type`, evitando o erro `Unsupported instance type` (a `us-east-1e`, por exemplo, não tem `t3.micro`)
 
 **`securitygroup.tf`** cria o SG `allow-ssh` liberando 22 e 80. **`script.sh`** instala o Nginx via `dnf` (Amazon Linux 2023). **`outputs.tf`** expõe o DNS do ELB e os endereços das instâncias.
 

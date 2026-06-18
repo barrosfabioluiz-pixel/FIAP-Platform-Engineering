@@ -19,6 +19,11 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
+variable "instance_type" {
+  description = "Tipo de instancia EC2 da frota. Usado tambem para descobrir as AZs que o ofertam."
+  default     = "t3.micro"
+}
+
 variable "key_name" {
   default = "vockey"
 }
