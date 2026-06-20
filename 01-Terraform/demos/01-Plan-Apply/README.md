@@ -657,10 +657,43 @@ Cada atributo de um recurso é marcado pelo provider como *updatable in-place* o
 
 <a id="passo-23"></a>
 
-**23.** **Não** aplique a recriação. Remova a linha `availability_zone` que você adicionou (voltando o `instance.tf` ao estado do passo 21, com a tag), confirme que o `plan` volta a `No changes`, e destrua:
+**23.** **Não** aplique a recriação. Vamos desfazer a mudança e confirmar que o plano volta ao normal **antes** de destruir. Faça em duas etapas separadas, para conseguir ler a saída de cada uma com calma.
+
+**23.1.** Desfaça a mudança e confirme que não há mais nada para alterar:
+
+**23.1.1.** Abra novamente o arquivo `instance.tf` no editor:
+
+```bash
+code instance.tf
+```
+
+**23.1.2.** Apague **todo** o conteúdo do arquivo e cole exatamente o texto abaixo no lugar (é o arquivo inteiro — voltamos ao estado do passo 21, **sem** a linha `availability_zone`):
+
+```hcl
+resource "aws_instance" "example" {
+  ami           = data.aws_ami.amazon_linux.id
+  instance_type = "t3.micro"
+
+  tags = {
+    Name = "vortex-poc"
+  }
+}
+```
+
+**23.1.3.** Salve o arquivo (**File → Save**, ou `Ctrl+S` / `Cmd+S`).
+
+**23.1.4.** Rode **somente** o `plan` e **leia a saída com atenção**:
 
 ```bash
 terraform plan
+```
+
+> [!IMPORTANT]
+> O resultado esperado é a mensagem **`No changes. Your infrastructure matches the configuration.`** Esse é o objetivo deste passo: como você desfez a alteração, o código voltou a bater com o que existe na AWS, então **não há nada a fazer**. Confirme que viu essa mensagem antes de continuar — é a prova de que reverter funcionou. (Se aparecer algo a alterar/destruir, seu `instance.tf` ainda está diferente do bloco acima; revise o passo 23.1.2.)
+
+**23.2.** Agora sim, destrua a instância:
+
+```bash
 terraform destroy -auto-approve
 ```
 
@@ -669,7 +702,8 @@ terraform destroy -auto-approve
 Se chegou até aqui, você:
 
 - viu o símbolo `~` (alteração in-place) ao adicionar uma tag
-- viu o símbolo `-/+` (replace com downtime) ao mudar o tipo da instância
+- viu o símbolo `-/+` (replace com downtime) ao fixar a Availability Zone
+- viu o `plan` voltar a **`No changes`** depois de desfazer a alteração
 - entendeu por que ler o `plan` antes do `apply` é inegociável
 
 ---
