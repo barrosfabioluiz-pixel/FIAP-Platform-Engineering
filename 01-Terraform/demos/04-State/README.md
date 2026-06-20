@@ -15,7 +15,7 @@ Os comandos `bash` rodam **no terminal do Codespaces**. A verificação é feita
 > - [ ] [Lab 01.3 — Count](../03-Count/README.md) concluído (você domina o ciclo e já destruiu a frota)
 > - [ ] A rede da demo 01.2 (VPC `fiap-lab`) aplicada — a instância de teste nasce numa subnet dela
 > - [ ] Credenciais AWS do Academy atualizadas no Codespaces
-> - [ ] Um bucket S3 criado no setup da disciplina (nome no formato `lab-fiap-<SUA-TURMA>-<SEU-RM>`)
+> - [ ] Um bucket S3 criado no setup da disciplina (nome no formato `base-config-<SEU-RM>`)
 >
 > **Descubra o nome do seu bucket:**
 >
